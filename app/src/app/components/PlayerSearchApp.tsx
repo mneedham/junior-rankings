@@ -1,20 +1,66 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
+import { ChangeEvent } from 'react';  // Add this import at the top
 import Papa from 'papaparse';
 import _ from 'lodash';
 
-const PlayerSearchApp = () => {
-  const [allPlayers, setAllPlayers] = useState([]);
-  const [filteredPlayers, setFilteredPlayers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPlayer, setSelectedPlayer] = useState(null);
-  const [countyRanks, setCountyRanks] = useState({});
-  const [yearRanks, setYearRanks] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+// interface RankingData {
+//     countyRank: number;
+//     countySize: number;
+//   }
   
-  const processPlayerData = (players) => {
+// interface YearRankingData {
+// yearRank: number;
+// yearSize: number;
+// }
+
+interface Player {
+'Player ID': string;
+'Player Name': string;
+'County'?: string;
+'Year'?: string | number;
+'Ranking Points'?: number;
+overallRank?: number;
+}
+
+// interface CountyRankings {
+// [playerId: string]: RankingData;
+// }
+
+// interface YearRankings {
+// [playerId: string]: YearRankingData;
+// }
+
+interface CountyRanking {
+countyRank?: number;
+countySize?: number;
+}
+
+interface CountyRankingsMap {
+[playerId: string]: CountyRanking;
+}  
+
+interface YearRanking {
+    yearRank?: number;
+    yearSize?: number;
+  }
+  
+interface YearRankingsMap {
+[playerId: string]: YearRanking;
+}
+
+const PlayerSearchApp = () => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+    const [filteredPlayers, setFilteredPlayers] = useState<Player[]>([]);
+    const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+    const [countyRanks, setCountyRanks] = useState<CountyRankingsMap>({});
+    const [yearRanks, setYearRanks] = useState<YearRankingsMap>({});
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+  
+  const processPlayerData = (players: Player[]) => {
     try {
       // Filter out invalid players
       const validPlayers = players.filter(player => 
@@ -40,8 +86,8 @@ const PlayerSearchApp = () => {
         playersWithRanks.filter(p => p.County), 
         'County'
       );
-      
-      const countyRankings = {};
+            
+      const countyRankings: CountyRankingsMap = {};
       
       Object.entries(playersByCounty).forEach(([county, countyPlayers]) => {
         if (!county) return;
@@ -68,8 +114,8 @@ const PlayerSearchApp = () => {
         playersWithRanks.filter(p => p.Year), 
         'Year'
       );
-      
-      const yearRankings = {};
+            
+      const yearRankings: YearRankingsMap = {};
       
       Object.entries(playersByYear).forEach(([year, yearPlayers]) => {
         if (!year) return;
@@ -96,9 +142,9 @@ const PlayerSearchApp = () => {
       setCountyRanks(countyRankings);
       setYearRanks(yearRankings);
       setLoading(false);
-    } catch (err) {
+    } catch (err: unknown) {  // explicitly type as unknown
       console.error("Error processing player data:", err);
-      setError(`Error processing data: ${err.message}`);
+      setError(`Error processing data: ${String(err)}`);
       setLoading(false);
     }
   };
@@ -114,10 +160,10 @@ const PlayerSearchApp = () => {
           skipEmptyLines: true
         });
         
-        processPlayerData(results.data);
-      } catch (error) {
-        console.error('Error fetching CSV:', error);
-        setError('Failed to fetch player data');
+        processPlayerData(results.data as Player[]);
+     } catch (err: unknown) {  // explicitly type as unknown
+        console.error("Error processing player data:", err);
+        setError(`Error processing data: ${String(err)}`);
         setLoading(false);
       }
     };
@@ -138,15 +184,15 @@ const PlayerSearchApp = () => {
     }
   }, [searchTerm, allPlayers]);
 
-  const handleSearch = (e) => {
+  const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   };
 
-  const handlePlayerSelect = (player) => {
+  const handlePlayerSelect = (player: Player) => {
     setSelectedPlayer(player);
   };
 
-  const findSimilarPlayers = () => {
+  const findSimilarPlayers = (): Player[] => {
     if (!selectedPlayer || !selectedPlayer['Player ID']) return [];
     
     const sameCountyAndYear = allPlayers.filter(player => 
@@ -159,11 +205,12 @@ const PlayerSearchApp = () => {
     const lowerBound = targetPoints * 0.7;
     const upperBound = targetPoints * 1.3;
     
-    const similarPoints = allPlayers.filter(player => 
-      player['Ranking Points'] >= lowerBound &&
-      player['Ranking Points'] <= upperBound &&
-      player['Player ID'] !== selectedPlayer['Player ID']
-    );
+    const similarPoints = allPlayers.filter(player => {
+      const playerPoints = player['Ranking Points'] || 0;  // Handle undefined case
+      return playerPoints >= lowerBound &&
+             playerPoints <= upperBound &&
+             player['Player ID'] !== selectedPlayer['Player ID'];
+    });
     
     const combined = _.uniqBy([...sameCountyAndYear, ...similarPoints], 'Player ID');
     return combined
@@ -181,6 +228,7 @@ const PlayerSearchApp = () => {
     const playerId = selectedPlayer['Player ID'];
     const countyRanking = countyRanks[playerId] || {};
     const yearRanking = yearRanks[playerId] || {};
+    
     const similarPlayers = findSimilarPlayers();
     
     return (
@@ -238,13 +286,17 @@ const PlayerSearchApp = () => {
                     </td>
                   </tr>
                 )}
-                <tr>
-                  <td className="py-2 font-medium text-foreground">Top 100:</td>
-                  <td className={selectedPlayer.overallRank <= 100 ? "font-bold text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                    {selectedPlayer.overallRank <= 100 ? 'Yes' : 'No'}
-                  </td>
+               <tr>
+                <td className="py-2 font-medium text-foreground">Top 100:</td>
+                <td className={
+                    (selectedPlayer.overallRank ?? Infinity) <= 100 
+                    ? "font-bold text-green-600 dark:text-green-400" 
+                    : "text-red-600 dark:text-red-400"
+                }>
+                    {(selectedPlayer.overallRank ?? Infinity) <= 100 ? 'Yes' : 'No'}
+                </td>
                 </tr>
-              </tbody>
+            </tbody>
             </table>
           </div>
         </div>
