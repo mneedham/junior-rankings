@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-conn = duckdb.connect('/Users/markhneedham/projects/junior-rankings/rankings.duckdb', read_only=True)
+conn = duckdb.connect('rankings.duckdb', read_only=True)
 
 
 # Function to load data with caching
