@@ -35,7 +35,8 @@ def load_player_rankings(player_id):
             p.year,
             rank() OVER (PARTITION BY week ORDER BY points DESC) as overallRanking,
             rank() OVER (PARTITION BY week, p.county ORDER BY points DESC) as countyRanking,
-            rank() OVER (PARTITION BY week, p.year ORDER BY points DESC) as ageGroupRanking
+            rank() OVER (PARTITION BY week, p.year ORDER BY points DESC) as ageGroupRanking,
+            rank() OVER (PARTITION BY week, p.county, p.year ORDER BY points DESC) as ageGroupCountyRanking
         FROM rankings r
         JOIN players p ON r.playerId = p.playerId
     )
@@ -45,7 +46,8 @@ def load_player_rankings(player_id):
         r.points, 
         ar.overallRanking,
         ar.countyRanking,
-        ar.ageGroupRanking
+        ar.ageGroupRanking,
+        ar.ageGroupCountyRanking
     FROM rankings r
     JOIN allRankings ar ON r.playerId = ar.playerId AND r.week = ar.week    
     WHERE r.playerId = {player_id}
@@ -54,8 +56,57 @@ def load_player_rankings(player_id):
     return conn.execute(query).df()
 
 @st.cache_data
+def load_surrounding_players(player_id, selected_week):
+    query = f"""
+    WITH allRankings AS (
+        SELECT 
+            week,
+            r.playerId,
+            p.playerName,
+            points,
+            p.county,
+            p.year,
+            rank() OVER (PARTITION BY week ORDER BY points DESC) as overall_ranking
+        FROM rankings r
+        JOIN players p ON r.playerId = p.playerId
+    ),
+    targetRankings AS (
+        SELECT week, overall_ranking
+        FROM allRankings
+        WHERE playerId = {player_id}
+    ),
+    surroundingPlayers AS (
+        SELECT 
+            ar.week,
+            ar.playerId,
+            ar.playerName,
+            ar.points,
+            ar.overall_ranking,
+            CASE 
+                WHEN ar.playerId = {player_id} THEN 0  -- Target player
+                ELSE ar.overall_ranking - tr.overall_ranking  -- Position relative to target
+            END as position_from_target
+        FROM allRankings ar
+        JOIN targetRankings tr ON ar.week = tr.week
+        -- Get players within 2 positions above and below
+        WHERE ar.overall_ranking BETWEEN (tr.overall_ranking - 3) AND (tr.overall_ranking + 3)
+    )
+    SELECT 
+        overall_ranking as "Rank",
+        playerName as "Player",
+        points as "Points"
+    FROM surroundingPlayers
+    WHERE week = ?
+    ORDER BY 
+        split(week, '-')[1]::Int,  -- First sort by week
+        overall_ranking,  -- Then by ranking within each week
+        playerName
+    """
+    return conn.execute(query, [selected_week]).df()
+
+@st.cache_data
 def get_unique_weeks():
-    result = conn.execute("SELECT DISTINCT week FROM rankings ORDER BY week").fetchall()
+    result = conn.execute("SELECT DISTINCT week FROM rankings ORDER BY split(week, '-')[1]::Int").fetchall()
     return [r[0] for r in result]
 
 @st.cache_data
@@ -168,7 +219,6 @@ with tab1:
                 player_rankings, 
                 x='week', 
                 y='tournaments',
-                title=f"Tournament Count for {player_details['playerName']}",
                 labels={'week': 'Month', 'tournaments': 'Tournament Count'}
             )
 
@@ -180,7 +230,6 @@ with tab1:
                 line=dict(color='red')
             )
 
-            # Update the layout to create a secondary y-axis and set ranges to start at 0
             fig.update_layout(
                 yaxis=dict(
                     title='Tournament Count',
@@ -196,11 +245,24 @@ with tab1:
 
 
             st.plotly_chart(fig, use_container_width=True)
-            
-            # Show tabular data
             st.dataframe(player_rankings, use_container_width=True, hide_index=True)
         else:
             st.info("No ranking data available for this player")
+
+        # Show surrounding players
+        st.subheader("Surrounding Players")
+        weeks = get_unique_weeks()
+        selected_week = st.selectbox("Select Week for Analysis", weeks, key="selected_week_player")
+        surrounding_players = load_surrounding_players(player_id, selected_week)
+        st.markdown("##### Overall")
+        if not surrounding_players.empty:
+            def highlight_target_player(row):
+                return ['background-color: #FF0; color:#000' if row['Player'] == selected_player_name else '' for _ in row]
+
+            styled_df = surrounding_players.style.apply(highlight_target_player, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No surrounding players found for this player")
 
 with tab2:
     st.header("Rankings Analysis")
