@@ -17,13 +17,11 @@ conn = duckdb.connect('rankings.duckdb', read_only=True)
 # Function to load data with caching
 @st.cache_data
 def load_players_data():
-    return pd.DataFrame(conn.execute("SELECT * FROM players").fetchall(), 
-                        columns=['playerName', 'playerId', 'memberId', 'year', 'county'])
+    return conn.execute("SELECT * FROM players").df()
 
 @st.cache_data
 def load_rankings_data():
-    return pd.DataFrame(conn.execute("SELECT * FROM rankings").fetchall(),
-                        columns=['week', 'playerId', 'tournaments'])
+    return conn.execute("SELECT * FROM rankings").df()
 
 @st.cache_data
 def load_player_rankings(player_id):
@@ -98,7 +96,7 @@ def get_player_count_by_county():
     GROUP BY county 
     ORDER BY player_count DESC
     """
-    return pd.DataFrame(conn.execute(query).fetchall(), columns=['county', 'player_count'])
+    return conn.execute(query).df()
 
 # App title and description
 st.title("🎾 Junior Tennis Rankings Dashboard")
