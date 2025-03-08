@@ -243,8 +243,10 @@ if not filtered_players.empty:
             )
         )
 
+        config = {'staticPlot': True}
 
-        st.plotly_chart(fig, use_container_width=True)
+        # Pass the config parameter to plotly_chart
+        st.plotly_chart(fig, use_container_width=True, config=config)
         st.dataframe(player_rankings, use_container_width=True, hide_index=True)
     else:
         st.info("No ranking data available for this player")
