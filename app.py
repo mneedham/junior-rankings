@@ -42,12 +42,12 @@ def load_player_rankings(player_id):
     )
     SELECT 
         r.week, 
-        r.tournaments, 
         r.points, 
-        ar.overallRanking,
-        ar.countyRanking,
-        ar.ageGroupRanking,
-        ar.ageGroupCountyRanking
+        ar.overallRanking AS overall,
+        ar.countyRanking AS county,
+        ar.ageGroupRanking AS ageGroup,
+        ar.ageGroupCountyRanking AS ageGroupCounty,
+        r.tournaments,
     FROM rankings r
     JOIN allRankings ar ON r.playerId = ar.playerId AND r.week = ar.week    
     WHERE r.playerId = {player_id}
@@ -133,7 +133,7 @@ def get_players_by_filter(county=None, year=None, name_search=None):
     
     where_clause = " AND ".join(conditions)
     query = """
-    SELECT playerName, players.playerId, year, county, row_number() OVER (ORDER BY points DESC) AS rank
+    SELECT rank() OVER (ORDER BY points DESC) AS rank, playerName, players.playerId, county, year, points
     FROM players
     JOIN rankings ON rankings.playerId = players.playerId AND rankings.week = ?
     """
@@ -183,7 +183,7 @@ st.header("Player Directory")
 # Show filtered players table with pagination
 if not filtered_players.empty:
     st.write(f"Found {len(filtered_players)} players matching your criteria")
-    st.dataframe(filtered_players, use_container_width=True, hide_index=True)
+    st.dataframe(filtered_players.drop(["playerId"], axis=1), use_container_width=True, hide_index=True)
 else:
     st.info("No players found matching your criteria")
 
